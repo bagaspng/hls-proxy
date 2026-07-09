@@ -1,0 +1,23 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Logging
+logs/
+*.log
+
+# Project specific local config and cache
+config.json
+cache_segments/
+
+# Operating System files
+.DS_Store
+Thumbs.db
