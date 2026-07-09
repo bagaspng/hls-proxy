@@ -8,16 +8,19 @@ Streaming (HLS) content, plus a built-in hls.js player.
 
 ```text
 hls/
-├── app.py            # Flask routes: / (player), /playlist, /segment, /key
-├── main.py           # Entry point — configures logging and starts the server
-├── config.py         # Stream source URL, Referer, host/port
-├── playlist.py       # .m3u8 downloader and URL rewriter
-├── proxy.py          # Segment/key proxy with HTTP Range (206) support
-├── player.html       # Built-in hls.js player page (served at /)
+├── app.py              # Flask routes: / (player), /playlist, /segment, /key, /embed
+├── main.py             # Entry point — configures rotating logging and starts the server
+├── config.py           # Config loader (reads config.json dynamically)
+├── config.json.example # Template for user settings (never commit config.json)
+├── playlist.py         # .m3u8 playlist downloader and URL rewriter
+├── proxy.py            # Segment/key proxy with caching, single-flight & retry mechanisms
+├── player.html         # Built-in hls.js player dashboard (served at /)
+├── embed.html          # Minimal player for iframe embeds (served at /embed)
 ├── static/
-│   └── hls.min.js    # hls.js 1.5.17, served locally (no CDN needed)
-├── logs/proxy.log    # Rotating request log
-├── requirements.txt  # flask, curl-cffi
+│   └── hls.min.js      # hls.js v1.5.17, served locally (no CDN needed)
+├── logs/               # Log folder (ignored by git)
+├── cache_segments/     # Disk cache for downloaded HLS segments (ignored by git)
+├── requirements.txt    # dependencies (flask, curl-cffi)
 └── README.md
 ```
 
