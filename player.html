@@ -40,11 +40,21 @@
       <button onclick="seek(1800)">30:00</button>
       <button onclick="location.reload()">Reload</button>
     </div>
+    <div class="row" style="margin-top: 14px;">
+      <label style="font-weight: 600; display: block; margin-bottom: 6px; font-size: 14px; color: #aaa;">Embed Code:</label>
+      <div style="display: flex; gap: 6px;">
+        <input id="embedInput" type="text" readonly
+               style="flex: 1; padding: 8px 10px; background: #0b0b0e; color: #9ad; border: 1px solid #333; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 13px;" />
+        <button onclick="copyEmbedCode()">Copy Code</button>
+      </div>
+    </div>
     <div id="log"></div>
   </main>
 
   <script>
-    // http://127.0.0.1:8000/?url=https://.../uwu.m3u8
+    // URL stream dibaca dari query ?url= di address bar.
+    // Contoh: http://127.0.0.1:8000/?url=https://.../uwu.m3u8
+    // Jika kosong, proxy memakai STREAM_URL default di config.py.
     const params = new URLSearchParams(location.search);
     const streamUrl = params.get("url");
     const refererVal = params.get("referer");
@@ -55,6 +65,8 @@
     const logEl = document.getElementById("log");
     const urlInput = document.getElementById("urlInput");
     const refInput = document.getElementById("refInput");
+    const embedInput = document.getElementById("embedInput");
+
     if (streamUrl) urlInput.value = streamUrl;
     if (refererVal) refInput.value = refererVal;
 
@@ -69,14 +81,53 @@
       if (r) dest += "&referer=" + encodeURIComponent(r);
       location.href = dest;
     }
+    // Enter di input mana pun = Load
     [urlInput, refInput].forEach(el =>
       el && el.addEventListener("keydown", e => { if (e.key === "Enter") loadUrl(); }));
 
+    // Generate dan update kode iframe embed
+    function updateEmbedCode() {
+      const currentHost = window.location.host;
+      const protocol = window.location.protocol;
+      let embedUrl = `${protocol}//${currentHost}/embed`;
+      
+      const queryParams = [];
+      if (streamUrl) {
+        queryParams.push("url=" + encodeURIComponent(streamUrl));
+      }
+      if (refererVal) {
+        queryParams.push("referer=" + encodeURIComponent(refererVal));
+      }
+      
+      if (queryParams.length > 0) {
+        embedUrl += "?" + queryParams.join("&");
+      }
+      
+      embedInput.value = `<iframe width="640" height="360" src="${embedUrl}" title="HLS Proxy Video Player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+    }
+    
+    updateEmbedCode();
+
+    function copyEmbedCode() {
+      embedInput.select();
+      embedInput.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(embedInput.value)
+        .then(() => {
+          log("Embed code copied to clipboard!", "ok");
+        })
+        .catch(err => {
+          log("Failed to copy embed code: " + err, "err");
+        });
+    }
+
     log("source: " + SRC, "info");
 
+    // Utamakan hls.js (MSE) — inilah jalur yang seek-nya andal di Chrome/Firefox.
+    // HLS native hanya fallback untuk browser tanpa MSE (mis. iOS Safari).
     if (Hls.isSupported()) {
       log("using hls.js (MSE)","info");
       const hls = new Hls({
+        // buffer besar supaya seek jauh tidak mudah kehabisan data
         maxBufferLength: 60,
         maxMaxBufferLength: 600,
         backBufferLength: 90,
@@ -92,6 +143,7 @@
         log("ERROR "+d.type+" / "+d.details+(d.fatal?" [FATAL]":"")
             +(d.mimeType?(" mime="+d.mimeType):"")+(msg?(" :: "+msg):""), "err");
         if (!d.fatal) return;
+        // pemulihan otomatis untuk error fatal
         switch (d.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
             log("-> startLoad() (recover network)","info"); hls.startLoad(); break;
@@ -103,6 +155,7 @@
       });
       window.hls = hls;
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Fallback: browser tanpa MSE (mis. iOS Safari) -> HLS native.
       log("using native HLS (fallback)","info");
       video.src = SRC;
       video.addEventListener("error", () => {
