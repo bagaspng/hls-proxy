@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Embedded Video Player</title>
+  <script src="/static/hls.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" controls autoplay playsinline></video>
+
+  <script>
+    // Contoh: http://127.0.0.1:8000/embed?url=https://.../uwu.m3u8
+    const params = new URLSearchParams(location.search);
+    const streamUrl = params.get("url");
+    const refererVal = params.get("referer");
+    let SRC = streamUrl ? "/playlist?url=" + encodeURIComponent(streamUrl) : "/playlist";
+    if (refererVal) SRC += (SRC.includes("?") ? "&" : "?") + "referer=" + encodeURIComponent(refererVal);
+
+    const video = document.getElementById("video");
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        maxBufferLength: 60,
+        maxMaxBufferLength: 600,
+        backBufferLength: 90,
+      });
+      hls.loadSource(SRC);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.ERROR, (e, d) => {
+        if (!d.fatal) return;
+        switch (d.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            hls.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            hls.recoverMediaError();
+            break;
+          default:
+            hls.destroy();
+            break;
+        }
+      });
+      window.hls = hls;
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = SRC;
+    } else {
+      console.error("Browser does not support MSE/HLS");
+    }
+  </script>
+</body>
+</html>
