@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HLS Proxy Player</title>
+  <script src="/static/hls.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background:#0d0d0f; color:#eee; }
+    header { padding:12px 20px; border-bottom:1px solid #222; font-weight:600; }
+    main { max-width: 1000px; margin: 20px auto; padding: 0 16px; }
+    video { width: 100%; background:#000; border-radius:8px; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px;
+           background:#000; color:#9ad; padding:10px; height:180px; overflow:auto;
+           margin-top:14px; border-radius:6px; }
+    .err { color:#ff6b6b; } .ok { color:#5cff8f; } .info { color:#8ab4ff; }
+    .row { margin-top:10px; }
+    button { padding:6px 12px; margin-right:6px; background:#1e1e24; color:#eee;
+             border:1px solid #333; border-radius:6px; cursor:pointer; }
+    button:hover { background:#2a2a33; }
+  </style>
+</head>
+<body>
+  <header>HLS Proxy Player</header>
+  <main>
+    <div style="margin-bottom:12px;">
+      <input id="urlInput" type="text" placeholder="URL .m3u8 (kosong = STREAM_URL default di config.py)"
+             style="width:100%; padding:6px 10px; margin-bottom:6px; background:#0b0b0e; color:#eee; border:1px solid #333; border-radius:6px;" />
+      <div class="row" style="display:flex; gap:6px;">
+        <input id="refInput" type="text" placeholder="Referer (kosong = REFERER default: kwik.cx)"
+               style="flex:1; padding:6px 10px; background:#0b0b0e; color:#eee; border:1px solid #333; border-radius:6px;" />
+        <button onclick="loadUrl()">Load</button>
+      </div>
+    </div>
+    <video id="video" controls autoplay playsinline></video>
+    <div class="row">
+      <button onclick="seek(60)">+1:00</button>
+      <button onclick="seek(300)">5:00</button>
+      <button onclick="seek(900)">15:00</button>
+      <button onclick="seek(1800)">30:00</button>
+      <button onclick="location.reload()">Reload</button>
+    </div>
+    <div id="log"></div>
+  </main>
+
+  <script>
+    // http://127.0.0.1:8000/?url=https://.../uwu.m3u8
+    const params = new URLSearchParams(location.search);
+    const streamUrl = params.get("url");
+    const refererVal = params.get("referer");
+    let SRC = streamUrl ? "/playlist?url=" + encodeURIComponent(streamUrl) : "/playlist";
+    if (refererVal) SRC += (SRC.includes("?") ? "&" : "?") + "referer=" + encodeURIComponent(refererVal);
+
+    const video = document.getElementById("video");
+    const logEl = document.getElementById("log");
+    const urlInput = document.getElementById("urlInput");
+    const refInput = document.getElementById("refInput");
+    if (streamUrl) urlInput.value = streamUrl;
+    if (refererVal) refInput.value = refererVal;
+
+    function log(m, cls){ const s=document.createElement("span"); if(cls)s.className=cls;
+      s.textContent=m+"\n"; logEl.appendChild(s); logEl.scrollTop=logEl.scrollHeight; }
+    function seek(t){ video.currentTime = t; log("seek -> "+t+"s","info"); }
+    function loadUrl(){
+      const u = urlInput.value.trim();
+      const r = refInput.value.trim();
+      if (!u) { location.href = "/"; return; }
+      let dest = "/?url=" + encodeURIComponent(u);
+      if (r) dest += "&referer=" + encodeURIComponent(r);
+      location.href = dest;
+    }
+    [urlInput, refInput].forEach(el =>
+      el && el.addEventListener("keydown", e => { if (e.key === "Enter") loadUrl(); }));
+
+    log("source: " + SRC, "info");
+
+    if (Hls.isSupported()) {
+      log("using hls.js (MSE)","info");
+      const hls = new Hls({
+        maxBufferLength: 60,
+        maxMaxBufferLength: 600,
+        backBufferLength: 90,
+      });
+      hls.loadSource(SRC);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (e, d) =>
+        log("manifest parsed, "+d.levels.length+" level(s)","ok"));
+
+      hls.on(Hls.Events.ERROR, (e, d) => {
+        const msg = (d.err && d.err.message) || d.reason || "";
+        log("ERROR "+d.type+" / "+d.details+(d.fatal?" [FATAL]":"")
+            +(d.mimeType?(" mime="+d.mimeType):"")+(msg?(" :: "+msg):""), "err");
+        if (!d.fatal) return;
+        switch (d.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            log("-> startLoad() (recover network)","info"); hls.startLoad(); break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            log("-> recoverMediaError()","info"); hls.recoverMediaError(); break;
+          default:
+            log("-> destroy (unrecoverable)","err"); hls.destroy(); break;
+        }
+      });
+      window.hls = hls;
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      log("using native HLS (fallback)","info");
+      video.src = SRC;
+      video.addEventListener("error", () => {
+        const err = video.error;
+        log("VIDEO ERROR code="+(err&&err.code)+" "+(err&&err.message||""),"err");
+      });
+    } else {
+      log("Browser tidak mendukung MSE/HLS","err");
+    }
+
+    video.addEventListener("seeking", () => log("seeking @ "+video.currentTime.toFixed(1)));
+    video.addEventListener("seeked",  () => log("seeked @ " +video.currentTime.toFixed(1),"info"));
+    video.addEventListener("playing", () => log("playing @ "+video.currentTime.toFixed(1),"ok"));
+    video.addEventListener("waiting", () => log("waiting (buffering)"));
+  </script>
+</body>
+</html>
