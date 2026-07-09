@@ -16,11 +16,18 @@ from proxy import proxy_request
 app = Flask(__name__)
 
 PLAYER_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "player.html")
+EMBED_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "embed.html")
 
 
 @app.route("/")
 def index():
     with open(PLAYER_HTML_PATH, "r", encoding="utf-8") as f:
+        return Response(f.read(), mimetype="text/html")
+
+
+@app.route("/embed")
+def embed():
+    with open(EMBED_HTML_PATH, "r", encoding="utf-8") as f:
         return Response(f.read(), mimetype="text/html")
 
 
